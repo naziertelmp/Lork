@@ -44,8 +44,7 @@ jobs:
         shell: bash
         run: |
           echo "Starting private TCP tunnel..."
-          # Added --headless to disable TUI and ensure text output
-          "$ZROK_EXE" share private --headless --backend-mode tcpTunnel 127.0.0.1:3389 > tunnel.log 2>&1 &
+          "$ZROK_EXE" share private --backend-mode tcpTunnel 127.0.0.1:3389 > tunnel.log 2>&1 &
           ZROK_PID=$!
           sleep 10
 
@@ -60,7 +59,11 @@ jobs:
             exit 1
           fi
 
-          share_token=$(grep -oP 'zrok2 access private \K\S+' tunnel.log | head -1) || true
+          # Extract token safely (disable exit-on-error temporarily)
+          set +e
+          share_token=$(grep -oP 'zrok2 access private \K\S+' tunnel.log | head -1)
+          set -e
+
           if [ -n "$share_token" ]; then
             echo "========================================="
             echo "Share Token: $share_token"
@@ -72,6 +75,7 @@ jobs:
             echo "========================================="
           else
             echo "Note: Could not extract share token automatically. Check log above."
+            echo "Look for the line containing 'zrok2 access private'."
           fi
 
           while true; do
