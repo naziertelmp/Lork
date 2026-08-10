@@ -44,7 +44,8 @@ jobs:
         shell: bash
         run: |
           echo "Starting private TCP tunnel..."
-          "$ZROK_EXE" share private --backend-mode tcpTunnel 127.0.0.1:3389 > tunnel.log 2>&1 &
+          # Added --headless to disable TUI and ensure text output
+          "$ZROK_EXE" share private --headless --backend-mode tcpTunnel 127.0.0.1:3389 > tunnel.log 2>&1 &
           ZROK_PID=$!
           sleep 10
 
