@@ -18,36 +18,39 @@ jobs:
       - name: Download and Install Zrok
         shell: bash
         run: |
-          # Get the latest download URL for Windows
-          DOWNLOAD_URL=$(curl -sL https://api.github.com/repos/openziti/zrok/releases/latest | \
-            grep "browser_download_url.*windows_amd64.tar.gz" | cut -d : -f 2,3 | tr -d \" | xargs)
-          echo "Downloading from: $DOWNLOAD_URL"
-          # Download the archive
+          # Direct download of zrok v2.0.4 for Windows (tar.gz)
+          DOWNLOAD_URL="https://github.com/openziti/zrok/releases/download/v2.0.4/zrok_2.0.4_windows_amd64.tar.gz"
+          echo "Downloading zrok from $DOWNLOAD_URL"
           curl -L -o zrok.tar.gz "$DOWNLOAD_URL"
-          # Extract, stripping the top-level directory so zrok.exe lands here
+          # Extract with stripping top-level directory
           tar -xzf zrok.tar.gz --strip-components=1
-          # Confirm the file exists
-          ls -la zrok.exe
-          # Add to PATH
+          ls -la
+          # Detect the actual executable name (e.g., zrok2.exe)
+          ZROK_EXE=$(ls zrok*.exe | head -1)
+          if [ -z "$ZROK_EXE" ]; then
+            echo "Error: No zrok executable found!"
+            exit 1
+          fi
+          echo "Found executable: $ZROK_EXE"
+          echo "ZROK_EXE=./$ZROK_EXE" >> $GITHUB_ENV
+          # Add to PATH for convenience
           echo "${{ github.workspace }}" >> $GITHUB_PATH
-          # Verify
-          ./zrok.exe version
+          # Test it
+          ./$ZROK_EXE version
 
       - name: Enable Zrok Account
         shell: bash
         env:
           ZROK_ENABLE_TOKEN: ${{ secrets.ZROK_ENABLE_TOKEN }}
         run: |
-          ./zrok.exe enable "$ZROK_ENABLE_TOKEN"
+          $ZROK_EXE enable "$ZROK_ENABLE_TOKEN"
 
       - name: Create Zrok TCP Tunnel for RDP
         shell: bash
         run: |
           echo "Reserving public TCP tunnel..."
-          # Reserve a public share for TCP tunneling
-          reserve_output=$(./zrok.exe reserve public --backend-mode tcpTunnel 127.0.0.1 3389 2>&1)
+          reserve_output=$($ZROK_EXE reserve public --backend-mode tcpTunnel 127.0.0.1 3389 2>&1)
           echo "$reserve_output"
-          # Extract the reserved share name
           share_name=$(echo "$reserve_output" | grep -oP 'reserved share: \K\S+')
           if [ -z "$share_name" ]; then
             echo "Failed to reserve share. Check output above."
@@ -56,13 +59,10 @@ jobs:
           echo "Share name: $share_name"
 
           echo "Starting tunnel..."
-          # Start the reserved share in the background
-          ./zrok.exe share reserved "$share_name" > tunnel.log 2>&1 &
+          $ZROK_EXE share reserved "$share_name" > tunnel.log 2>&1 &
           sleep 10
 
-          # Display connection info
           cat tunnel.log
-          # Extract the public TCP URL (e.g., tcp://xxxx.share.zrok.io:12345)
           tcp_url=$(grep -oP 'tcp://[^ ]+' tunnel.log | head -1)
           if [ -n "$tcp_url" ]; then
             hostName=$(echo "$tcp_url" | sed -E 's#tcp://([^:]+):.*#\1#')
@@ -79,7 +79,6 @@ jobs:
             exit 1
           fi
 
-          # Keep the runner alive
           while true; do
             echo "[$(date)] RDP Active via Zrok"
             sleep 300
