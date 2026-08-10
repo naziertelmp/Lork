@@ -59,16 +59,18 @@ jobs:
             exit 1
           fi
 
-          invite_url=$(grep -oP 'https://[^ ]*invitation/[a-zA-Z0-9]+' tunnel.log | head -1)
-          if [ -n "$invite_url" ]; then
+          share_token=$(grep -oP 'zrok2 access private \K\S+' tunnel.log | head -1) || true
+          if [ -n "$share_token" ]; then
             echo "========================================="
-            echo "Invitation Link: $invite_url"
+            echo "Share Token: $share_token"
             echo ""
             echo "On the client machine, run:"
-            echo "  zrok access private $invite_url"
+            echo "  zrok access private $share_token"
+            echo "This will bind RDP to a local port (e.g., 127.0.0.1:9191)"
+            echo "Then connect RDP to that local address."
             echo "========================================="
           else
-            echo "Note: Invitation URL not found yet, but tunnel is active. Check full log above."
+            echo "Note: Could not extract share token automatically. Check log above."
           fi
 
           while true; do
