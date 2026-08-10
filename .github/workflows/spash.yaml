@@ -1,4 +1,4 @@
-name: Windows RDP Zrok
+name: Windows RDP Zrok (Private Share)
 
 on:
   workflow_dispatch:
@@ -41,41 +41,34 @@ jobs:
         run: |
           "$ZROK_EXE" enable "$ZROK_ENABLE_TOKEN"
 
-      - name: Create Zrok TCP Tunnel for RDP
+      - name: Create Zrok TCP Tunnel (Private)
         shell: bash
         run: |
-          echo "Reserving public TCP tunnel..."
-          reserve_output=$("$ZROK_EXE" reserve public --backend-mode tcpTunnel 127.0.0.1 3389 2>&1)
-          echo "$reserve_output"
-          share_name=$(echo "$reserve_output" | grep -oP 'reserved share: \K\S+')
-          if [ -z "$share_name" ]; then
-            echo "Failed to reserve share. Check output above."
-            exit 1
-          fi
-          echo "Share name: $share_name"
-
-          echo "Starting tunnel..."
-          "$ZROK_EXE" share reserved "$share_name" > tunnel.log 2>&1 &
+          echo "Starting private TCP tunnel..."
+          # Start private share directly, no reserve needed
+          "$ZROK_EXE" share private --backend-mode tcpTunnel 127.0.0.1:3389 > tunnel.log 2>&1 &
           sleep 10
 
           cat tunnel.log
-          tcp_url=$(grep -oP 'tcp://[^ ]+' tunnel.log | head -1)
-          if [ -n "$tcp_url" ]; then
-            hostName=$(echo "$tcp_url" | sed -E 's#tcp://([^:]+):.*#\1#')
-            portNumber=$(echo "$tcp_url" | sed -E 's#tcp://[^:]+:([0-9]+)#\1#')
+          # Extract the invitation URL (e.g., https://xxx.share.zrok.io/invitation/...)
+          invite_url=$(grep -oP 'https://[^ ]*invitation/[a-zA-Z0-9]+' tunnel.log | head -1)
+          if [ -n "$invite_url" ]; then
             echo "========================================="
-            echo "RDP Address: $hostName"
-            echo "RDP Port: $portNumber"
-            echo "RDP User: runneradmin"
-            echo "RDP Pass: admin@123"
+            echo "Invitation Link: $invite_url"
+            echo ""
+            echo "On the client machine, run:"
+            echo "  zrok access private $invite_url"
+            echo "This will bind RDP to a local port (e.g., 127.0.0.1:9191)"
+            echo "Then connect RDP to that local address."
             echo "========================================="
           else
-            echo "Failed to extract public URL. Full log:"
+            echo "Failed to extract invitation URL. Full log:"
             cat tunnel.log
             exit 1
           fi
 
+          # Keep the runner alive
           while true; do
-            echo "[$(date)] RDP Active via Zrok"
+            echo "[$(date)] RDP Active via Zrok (private share)"
             sleep 300
           done
