@@ -18,14 +18,18 @@ jobs:
       - name: Download and Install Zrok
         shell: bash
         run: |
-          # Download latest zrok release for Windows
-          curl -sL https://api.github.com/repos/openziti/zrok/releases/latest | \
-            grep "browser_download_url.*windows_amd64.tar.gz" | \
-            cut -d : -f 2,3 | tr -d \" | wget -qi -
-          tar -xzf zrok_*_windows_amd64.tar.gz
+          # Get the latest download URL for Windows
+          DOWNLOAD_URL=$(curl -sL https://api.github.com/repos/openziti/zrok/releases/latest | \
+            grep "browser_download_url.*windows_amd64.tar.gz" | cut -d : -f 2,3 | tr -d \")
+          # Trim whitespace
+          DOWNLOAD_URL=$(echo $DOWNLOAD_URL)
+          echo "Downloading from: $DOWNLOAD_URL"
+          # Download the archive
+          curl -L -o zrok.tar.gz "$DOWNLOAD_URL"
+          tar -xzf zrok.tar.gz
           # Add to PATH
           echo "${{ github.workspace }}" >> $GITHUB_PATH
-          # Verify installation
+          # Verify
           ./zrok.exe version
 
       - name: Enable Zrok Account
@@ -79,3 +83,4 @@ jobs:
             echo "[$(date)] RDP Active via Zrok"
             sleep 300
           done
+          
