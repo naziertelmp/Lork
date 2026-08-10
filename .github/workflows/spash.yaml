@@ -18,38 +18,34 @@ jobs:
       - name: Download and Install Zrok
         shell: bash
         run: |
-          # Direct download of zrok v2.0.4 for Windows (tar.gz)
           DOWNLOAD_URL="https://github.com/openziti/zrok/releases/download/v2.0.4/zrok_2.0.4_windows_amd64.tar.gz"
           echo "Downloading zrok from $DOWNLOAD_URL"
           curl -L -o zrok.tar.gz "$DOWNLOAD_URL"
-          # Extract with stripping top-level directory
-          tar -xzf zrok.tar.gz --strip-components=1
-          ls -la
-          # Detect the actual executable name (e.g., zrok2.exe)
-          ZROK_EXE=$(ls zrok*.exe | head -1)
+          tar -xzf zrok.tar.gz
+          echo "Files after extraction:"
+          find . -name "*.exe"
+          ZROK_EXE=$(find . -name "zrok*.exe" -type f | head -1)
           if [ -z "$ZROK_EXE" ]; then
             echo "Error: No zrok executable found!"
             exit 1
           fi
           echo "Found executable: $ZROK_EXE"
-          echo "ZROK_EXE=./$ZROK_EXE" >> $GITHUB_ENV
-          # Add to PATH for convenience
-          echo "${{ github.workspace }}" >> $GITHUB_PATH
-          # Test it
-          ./$ZROK_EXE version
+          echo "ZROK_EXE=$(realpath "$ZROK_EXE")" >> $GITHUB_ENV
+          # Verify
+          "$ZROK_EXE" version
 
       - name: Enable Zrok Account
         shell: bash
         env:
           ZROK_ENABLE_TOKEN: ${{ secrets.ZROK_ENABLE_TOKEN }}
         run: |
-          $ZROK_EXE enable "$ZROK_ENABLE_TOKEN"
+          "$ZROK_EXE" enable "$ZROK_ENABLE_TOKEN"
 
       - name: Create Zrok TCP Tunnel for RDP
         shell: bash
         run: |
           echo "Reserving public TCP tunnel..."
-          reserve_output=$($ZROK_EXE reserve public --backend-mode tcpTunnel 127.0.0.1 3389 2>&1)
+          reserve_output=$("$ZROK_EXE" reserve public --backend-mode tcpTunnel 127.0.0.1 3389 2>&1)
           echo "$reserve_output"
           share_name=$(echo "$reserve_output" | grep -oP 'reserved share: \K\S+')
           if [ -z "$share_name" ]; then
@@ -59,7 +55,7 @@ jobs:
           echo "Share name: $share_name"
 
           echo "Starting tunnel..."
-          $ZROK_EXE share reserved "$share_name" > tunnel.log 2>&1 &
+          "$ZROK_EXE" share reserved "$share_name" > tunnel.log 2>&1 &
           sleep 10
 
           cat tunnel.log
