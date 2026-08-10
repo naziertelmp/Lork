@@ -20,13 +20,14 @@ jobs:
         run: |
           # Get the latest download URL for Windows
           DOWNLOAD_URL=$(curl -sL https://api.github.com/repos/openziti/zrok/releases/latest | \
-            grep "browser_download_url.*windows_amd64.tar.gz" | cut -d : -f 2,3 | tr -d \")
-          # Trim whitespace
-          DOWNLOAD_URL=$(echo $DOWNLOAD_URL)
+            grep "browser_download_url.*windows_amd64.tar.gz" | cut -d : -f 2,3 | tr -d \" | xargs)
           echo "Downloading from: $DOWNLOAD_URL"
           # Download the archive
           curl -L -o zrok.tar.gz "$DOWNLOAD_URL"
-          tar -xzf zrok.tar.gz
+          # Extract, stripping the top-level directory so zrok.exe lands here
+          tar -xzf zrok.tar.gz --strip-components=1
+          # Confirm the file exists
+          ls -la zrok.exe
           # Add to PATH
           echo "${{ github.workspace }}" >> $GITHUB_PATH
           # Verify
@@ -83,4 +84,3 @@ jobs:
             echo "[$(date)] RDP Active via Zrok"
             sleep 300
           done
-          
