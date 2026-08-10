@@ -45,12 +45,14 @@ jobs:
         shell: bash
         run: |
           echo "Starting private TCP tunnel..."
-          # Start private share directly, no reserve needed
-          "$ZROK_EXE" share private --backend-mode tcpTunnel 127.0.0.1:3389 > tunnel.log 2>&1 &
+          # Correct syntax: IP and port separated by space
+          "$ZROK_EXE" share private --backend-mode tcpTunnel 127.0.0.1 3389 > tunnel.log 2>&1 &
           sleep 10
 
+          # Output the log for debugging
           cat tunnel.log
-          # Extract the invitation URL (e.g., https://xxx.share.zrok.io/invitation/...)
+
+          # Extract the invitation link
           invite_url=$(grep -oP 'https://[^ ]*invitation/[a-zA-Z0-9]+' tunnel.log | head -1)
           if [ -n "$invite_url" ]; then
             echo "========================================="
@@ -62,8 +64,7 @@ jobs:
             echo "Then connect RDP to that local address."
             echo "========================================="
           else
-            echo "Failed to extract invitation URL. Full log:"
-            cat tunnel.log
+            echo "Failed to start private share. Check the log above for details."
             exit 1
           fi
 
