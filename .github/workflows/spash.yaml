@@ -31,7 +31,6 @@ jobs:
           fi
           echo "Found executable: $ZROK_EXE"
           echo "ZROK_EXE=$(realpath "$ZROK_EXE")" >> $GITHUB_ENV
-          # Verify
           "$ZROK_EXE" version
 
       - name: Enable Zrok Account
@@ -45,14 +44,11 @@ jobs:
         shell: bash
         run: |
           echo "Starting private TCP tunnel..."
-          # Correct syntax: IP and port separated by space
-          "$ZROK_EXE" share private --backend-mode tcpTunnel 127.0.0.1 3389 > tunnel.log 2>&1 &
+          # Correct syntax: target is "IP:Port"
+          "$ZROK_EXE" share private --backend-mode tcpTunnel 127.0.0.1:3389 > tunnel.log 2>&1 &
           sleep 10
 
-          # Output the log for debugging
           cat tunnel.log
-
-          # Extract the invitation link
           invite_url=$(grep -oP 'https://[^ ]*invitation/[a-zA-Z0-9]+' tunnel.log | head -1)
           if [ -n "$invite_url" ]; then
             echo "========================================="
@@ -64,11 +60,10 @@ jobs:
             echo "Then connect RDP to that local address."
             echo "========================================="
           else
-            echo "Failed to start private share. Check the log above for details."
+            echo "Failed to start private share. Full log above."
             exit 1
           fi
 
-          # Keep the runner alive
           while true; do
             echo "[$(date)] RDP Active via Zrok (private share)"
             sleep 300
