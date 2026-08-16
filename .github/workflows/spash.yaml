@@ -1,4 +1,4 @@
-name: Windows RDP Serveo Tunnel
+name: Windows RDP LocalhostRun Tunnel
 
 on:
   workflow_dispatch:
@@ -15,12 +15,12 @@ jobs:
           netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
           net user runneradmin "admin@123"
 
-      - name: Start SSH Tunnel (Serveo)
+      - name: Start SSH Tunnel (localhost.run)
         shell: bash
         run: |
-          echo "Starting SSH Tunnel via Serveo..."
-          # Request a random public port
-          ssh -o StrictHostKeyChecking=no -T -R 0:localhost:3389 serveo.net > tunnel.log 2>&1 &
+          echo "Starting SSH Tunnel via localhost.run..."
+          # -R 0:localhost:3389 asks for a random public port
+          ssh -o StrictHostKeyChecking=no -T -R 0:localhost:3389 nokey@localhost.run > tunnel.log 2>&1 &
           SSH_PID=$!
           sleep 15
           
@@ -29,10 +29,17 @@ jobs:
           echo "=== End of Log ==="
           
           log_content=$(cat tunnel.log)
-          # Serveo outputs: "Forwarding TCP -> serveo.net:PORT" or "Access via: serveo.net:PORT"
-          if [[ $log_content =~ serveo\.net:([0-9]+) ]]; then
-              portNumber="${BASH_REMATCH[1]}"
-              hostName="serveo.net"
+          
+          # localhost.run outputs a line like:
+          # "tcp://xxxx.lhr.life:12345" or "Connect to http://xxxx.lhr.life:12345"
+          # We'll capture the URL that contains lhr.life
+          if [[ $log_content =~ ([a-zA-Z0-9-]+\.lhr\.life):?([0-9]*) ]]; then
+              hostName="${BASH_REMATCH[1]}"
+              portNumber="${BASH_REMATCH[2]}"
+              # If portNumber is empty, try to find it after "port " or after colon later
+              if [ -z "$portNumber" ]; then
+                  portNumber=$(echo "$log_content" | grep -oP 'port \K[0-9]+' | head -1)
+              fi
               echo "========================================="
               echo "RDP Address: $hostName"
               echo "RDP Port: $portNumber"
@@ -47,6 +54,6 @@ jobs:
           
           # Keep the runner alive
           while true; do
-              echo "[$(date)] RDP Active via Serveo"
+              echo "[$(date)] RDP Active via localhost.run"
               sleep 300
           done
