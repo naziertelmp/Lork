@@ -1,4 +1,4 @@
-name: Windows RDP Zrok (Private Share)
+name: Windows RDP Serveo Tunnel
 
 on:
   workflow_dispatch:
@@ -15,70 +15,38 @@ jobs:
           netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
           net user runneradmin "admin@123"
 
-      - name: Download and Install Zrok
+      - name: Start SSH Tunnel (Serveo)
         shell: bash
         run: |
-          DOWNLOAD_URL="https://github.com/openziti/zrok/releases/download/v2.0.4/zrok_2.0.4_windows_amd64.tar.gz"
-          echo "Downloading zrok from $DOWNLOAD_URL"
-          curl -L -o zrok.tar.gz "$DOWNLOAD_URL"
-          tar -xzf zrok.tar.gz
-          echo "Files after extraction:"
-          find . -name "*.exe"
-          ZROK_EXE=$(find . -name "zrok*.exe" -type f | head -1)
-          if [ -z "$ZROK_EXE" ]; then
-            echo "Error: No zrok executable found!"
-            exit 1
-          fi
-          echo "Found executable: $ZROK_EXE"
-          echo "ZROK_EXE=$(realpath "$ZROK_EXE")" >> $GITHUB_ENV
-          "$ZROK_EXE" version
-
-      - name: Enable Zrok Account
-        shell: bash
-        env:
-          ZROK_ENABLE_TOKEN: ${{ secrets.ZROK_ENABLE_TOKEN }}
-        run: |
-          "$ZROK_EXE" enable "$ZROK_ENABLE_TOKEN"
-
-      - name: Create Zrok TCP Tunnel (Private)
-        shell: bash
-        run: |
-          echo "Starting private TCP tunnel..."
-          "$ZROK_EXE" share private --backend-mode tcpTunnel 127.0.0.1:3389 > tunnel.log 2>&1 &
-          ZROK_PID=$!
-          sleep 10
-
+          echo "Starting SSH Tunnel via Serveo..."
+          # Request a random public port
+          ssh -o StrictHostKeyChecking=no -T -R 0:localhost:3389 serveo.net > tunnel.log 2>&1 &
+          SSH_PID=$!
+          sleep 15
+          
           echo "=== Tunnel Log Output ==="
           cat tunnel.log
           echo "=== End of Log ==="
-
-          if kill -0 $ZROK_PID 2>/dev/null; then
-            echo "Zrok process is running (PID: $ZROK_PID)"
+          
+          log_content=$(cat tunnel.log)
+          # Serveo outputs: "Forwarding TCP -> serveo.net:PORT" or "Access via: serveo.net:PORT"
+          if [[ $log_content =~ serveo\.net:([0-9]+) ]]; then
+              portNumber="${BASH_REMATCH[1]}"
+              hostName="serveo.net"
+              echo "========================================="
+              echo "RDP Address: $hostName"
+              echo "RDP Port: $portNumber"
+              echo "RDP User: runneradmin"
+              echo "RDP Pass: admin@123"
+              echo "========================================="
           else
-            echo "Zrok process exited prematurely."
-            exit 1
+              echo "Failed to extract public URL. Full log:"
+              cat tunnel.log
+              exit 1
           fi
-
-          # Extract token safely (disable exit-on-error temporarily)
-          set +e
-          share_token=$(grep -oP 'zrok2 access private \K\S+' tunnel.log | head -1)
-          set -e
-
-          if [ -n "$share_token" ]; then
-            echo "========================================="
-            echo "Share Token: $share_token"
-            echo ""
-            echo "On the client machine, run:"
-            echo "  zrok access private $share_token"
-            echo "This will bind RDP to a local port (e.g., 127.0.0.1:9191)"
-            echo "Then connect RDP to that local address."
-            echo "========================================="
-          else
-            echo "Note: Could not extract share token automatically. Check log above."
-            echo "Look for the line containing 'zrok2 access private'."
-          fi
-
+          
+          # Keep the runner alive
           while true; do
-            echo "[$(date)] RDP Active via Zrok (private share)"
-            sleep 300
+              echo "[$(date)] RDP Active via Serveo"
+              sleep 300
           done
