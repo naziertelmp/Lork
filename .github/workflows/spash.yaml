@@ -18,19 +18,18 @@ jobs:
       - name: Download Bore
         shell: bash
         run: |
-          # Download the latest bore release for Windows
-          curl -sL https://api.github.com/repos/ekzhang/bore/releases/latest | \
-            grep "browser_download_url.*windows-x86_64" | cut -d : -f 2,3 | tr -d \" | wget -qi -
-          # Extract
-          unzip -o bore*.zip
+          # Direct download from provided link
+          BORE_URL="https://github.com/ekzhang/bore/releases/download/v0.6.0/bore-v0.6.0-x86_64-pc-windows-msvc.zip"
+          curl -L -o bore.zip "$BORE_URL"
+          unzip -o bore.zip
           ls -la
           echo "BORE_EXE=$(pwd)/bore.exe" >> $GITHUB_ENV
 
-      - name: Start Bore Tunnel
+      - name: Start Bore Tunnel for RDP
         shell: bash
         run: |
-          echo "Starting Bore TCP tunnel for RDP..."
-          # bore local <local_port> --to bore.pub --port <remote_port> (use 0 for random)
+          echo "Starting Bore TCP tunnel on port 3389..."
+          # Create a TCP tunnel: local port 3389 -> bore.pub random port
           "$BORE_EXE" local 3389 --to bore.pub --port 0 > tunnel.log 2>&1 &
           BORE_PID=$!
           sleep 10
@@ -39,16 +38,17 @@ jobs:
           cat tunnel.log
           echo "=== End of Log ==="
 
-          # Extract the assigned address and port
-          # bore output typically looks like:
+          # Extract the assigned public address and port
+          # bore log contains lines like:
           # "listening at bore.pub:12345" or "tcp://bore.pub:12345"
+          # We'll try to capture the address with port
           address=$(grep -oP '(?:listening at|tcp://)\s*\K[^ ]+' tunnel.log | head -1)
           if [ -n "$address" ]; then
-            # Remove any trailing characters
-            hostPort="$address"
-            # If it's just a port, prepend bore.pub
-            if [[ "$hostPort" =~ ^[0-9]+$ ]]; then
-              hostPort="bore.pub:$hostPort"
+            # If address is just a port number, prepend bore.pub
+            if [[ "$address" =~ ^[0-9]+$ ]]; then
+              hostPort="bore.pub:$address"
+            else
+              hostPort="$address"
             fi
             echo "========================================="
             echo "RDP Address: $hostPort"
@@ -56,9 +56,9 @@ jobs:
             echo "RDP Pass: admin@123"
             echo "========================================="
           else
-            echo "Could not auto-detect address. Check your bore.log above or the full log."
-            echo "But the tunnel is running. You can find the address in the log."
-            # Keep alive
+            echo "Could not auto-detect address. Check the log above."
+            echo "You can also check the full tunnel.log for the address."
+            # Don't exit; keep alive
           fi
 
           # Keep the runner alive
