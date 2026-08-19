@@ -1,4 +1,4 @@
-name: Windows RDP LocalhostRun Tunnel
+name: Windows RDP Bore Tunnel
 
 on:
   workflow_dispatch:
@@ -15,45 +15,54 @@ jobs:
           netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
           net user runneradmin "admin@123"
 
-      - name: Start SSH Tunnel (localhost.run)
+      - name: Download Bore
         shell: bash
         run: |
-          echo "Starting SSH Tunnel via localhost.run..."
-          # -R 0:localhost:3389 asks for a random public port
-          ssh -o StrictHostKeyChecking=no -T -R 0:localhost:3389 nokey@localhost.run > tunnel.log 2>&1 &
-          SSH_PID=$!
-          sleep 15
-          
+          # Download the latest bore release for Windows
+          curl -sL https://api.github.com/repos/ekzhang/bore/releases/latest | \
+            grep "browser_download_url.*windows-x86_64" | cut -d : -f 2,3 | tr -d \" | wget -qi -
+          # Extract
+          unzip -o bore*.zip
+          ls -la
+          echo "BORE_EXE=$(pwd)/bore.exe" >> $GITHUB_ENV
+
+      - name: Start Bore Tunnel
+        shell: bash
+        run: |
+          echo "Starting Bore TCP tunnel for RDP..."
+          # bore local <local_port> --to bore.pub --port <remote_port> (use 0 for random)
+          "$BORE_EXE" local 3389 --to bore.pub --port 0 > tunnel.log 2>&1 &
+          BORE_PID=$!
+          sleep 10
+
           echo "=== Tunnel Log Output ==="
           cat tunnel.log
           echo "=== End of Log ==="
-          
-          log_content=$(cat tunnel.log)
-          
-          # localhost.run outputs a line like:
-          # "tcp://xxxx.lhr.life:12345" or "Connect to http://xxxx.lhr.life:12345"
-          # We'll capture the URL that contains lhr.life
-          if [[ $log_content =~ ([a-zA-Z0-9-]+\.lhr\.life):?([0-9]*) ]]; then
-              hostName="${BASH_REMATCH[1]}"
-              portNumber="${BASH_REMATCH[2]}"
-              # If portNumber is empty, try to find it after "port " or after colon later
-              if [ -z "$portNumber" ]; then
-                  portNumber=$(echo "$log_content" | grep -oP 'port \K[0-9]+' | head -1)
-              fi
-              echo "========================================="
-              echo "RDP Address: $hostName"
-              echo "RDP Port: $portNumber"
-              echo "RDP User: runneradmin"
-              echo "RDP Pass: admin@123"
-              echo "========================================="
+
+          # Extract the assigned address and port
+          # bore output typically looks like:
+          # "listening at bore.pub:12345" or "tcp://bore.pub:12345"
+          address=$(grep -oP '(?:listening at|tcp://)\s*\K[^ ]+' tunnel.log | head -1)
+          if [ -n "$address" ]; then
+            # Remove any trailing characters
+            hostPort="$address"
+            # If it's just a port, prepend bore.pub
+            if [[ "$hostPort" =~ ^[0-9]+$ ]]; then
+              hostPort="bore.pub:$hostPort"
+            fi
+            echo "========================================="
+            echo "RDP Address: $hostPort"
+            echo "RDP User: runneradmin"
+            echo "RDP Pass: admin@123"
+            echo "========================================="
           else
-              echo "Failed to extract public URL. Full log:"
-              cat tunnel.log
-              exit 1
+            echo "Could not auto-detect address. Check your bore.log above or the full log."
+            echo "But the tunnel is running. You can find the address in the log."
+            # Keep alive
           fi
-          
+
           # Keep the runner alive
           while true; do
-              echo "[$(date)] RDP Active via localhost.run"
-              sleep 300
+            echo "[$(date)] RDP Active via Bore"
+            sleep 300
           done
